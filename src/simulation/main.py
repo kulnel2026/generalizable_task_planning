@@ -1,5 +1,13 @@
 from simulation import simulate
 import argparse
+import pybullet as p
+import pybullet_data
+import os
+import math
+import numpy as np
+from utils import current_joint_positions, get_point_cloud
+import h5py
+import time
 
 def main(num_sims=10, with_gui=False):
     simulate(num_sims, with_gui)
