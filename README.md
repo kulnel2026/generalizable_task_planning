@@ -32,3 +32,4 @@ The architecture integrates two primary components for robotic task execution: a
       primaryClass={cs.RO}
 }
 ```
+# generalizing_task_planning
