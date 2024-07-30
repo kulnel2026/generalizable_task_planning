@@ -17,6 +17,8 @@ import tf
 import logging
 from control_msgs.msg import FollowJointTrajectoryAction, FollowJointTrajectoryGoal
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+import tensorflow
+import cv2
 
 
 #Add object
@@ -41,6 +43,63 @@ CONTROL_DT = 1. / 960.
 
 initial_position = None
 target_position = None
+
+
+
+model_dir = 'Windows/media/neel/Windows/Users/kulka/generalizable_task_planning/src/simulation/mask_rcnn_inception_v2_coco.config'
+
+def load_model():
+    model = tensorflow.saved_model.load(model_dir)
+    return model
+
+def run_inference_for_single_image(model, image):
+    image_np = np.asarray(image)
+    input_tensor = tensorflow.convert_to_tensor(image_np)
+    input_tensor = input_tensor[tensorflow.newaxis, ...]
+    
+    output_dict = model(input_tensor)
+    
+    
+    output_dict = {key:value.numpy() for key,value in output_dict.items()}
+    
+    num_detections = int(output_dict['num_detections'][0])
+    boxes = output_dict['detection_boxes'][0]
+    classes = output_dict['detection_classes'][0]
+    scores = output_dict['detection_scores'][0]
+    
+    return boxes, classes, scores, num_detections
+
+
+
+#Object segmentation
+
+def get_rgbd_images():
+    _, rgb_image = p.getCameraImage(width=640, height=480)
+    rgb_image = np.array(rgb_image)
+
+    _, _, depth_image = p.getCameraImage(width=640, height=480, renderer=p.ER_BULLET_HARDWARE_OPENGL)
+    depth_image = np.array(depth_image)
+
+    return rgb_image, depth_image
+
+def segment_objects_in_environment(model):
+    rgb_image, depth_image = get_rgbd_images()
+    boxes, classes, scores, num_detections = run_inference_for_single_image(model, rgb_image)
+
+    for i in range(num_detections):
+        if scores[i] > 0.5:  
+            box = boxes[i]
+            class_id = int(classes[i])
+            cv2.rectangle(rgb_image, 
+                        (int(box[1] * rgb_image.shape[1]), int(box[0] * rgb_image.shape[0])),
+                        (int(box[3] * rgb_image.shape[1]), int(box[2] * rgb_image.shape[0])), 
+                        (0, 255, 0), 2)
+        
+    cv2.imshow('Segmented Image', rgb_image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
 
 def setup_environment(with_gui):
     """
@@ -101,14 +160,14 @@ def create_object():
         [0, 1, 0, 1]   # Green
     ]
 
-    x_min, x_max = 0.2, 0.6
-    y_min, y_max = -0.3, 0.3
+    x_min, x_max = 0.0, 0.6
+    y_min, y_max = -0.3, -0.05
 
     for color in colors:
         block_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.03, 0.03, 0.03])
         block_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[0.03, 0.03, 0.03], rgbaColor=color)
         block_body = p.createMultiBody(baseMass=1.0, baseCollisionShapeIndex=block_shape, baseVisualShapeIndex=block_visual_shape)
-        p.changeDynamics(block_body, -1, lateralFriction=1.5, spinningFriction=1.0, rollingFriction=1.0)
+        p.changeDynamics(block_body, -1, lateralFriction=4.5, spinningFriction=1.0, rollingFriction=1.0)
 
         initial_x = np.random.uniform(x_min, x_max)
         initial_y = np.random.uniform(y_min, y_max)
@@ -158,7 +217,7 @@ def arm_control(object_uid, color, move_group, state):
     elif (state == 3):
         target_position[2] += 0.2
     elif (state == 4):
-        stack_position = [0.5, 0.0, 0.2]
+        stack_position = [0.5, 0.3, 0.2]
         target_position = stack_position
 
     pose_target = geometry_msgs.msg.Pose()
@@ -211,7 +270,7 @@ def control_robot_state(kinova_uid, object_uid, state, move_group):
         for i in range(num_steps):
             for i, joint in enumerate(FINGER_JOINTS):
                 target_pos = 0.6 * MAX_FINGER_POS if i % 2 == 0 else 0.5 * MAX_FINGER_POS
-                p.setJointMotorControl2(kinova_uid, joint, p.POSITION_CONTROL, target_pos, force=30)
+                p.setJointMotorControl2(kinova_uid, joint, p.POSITION_CONTROL, target_pos, force=60)
             p.stepSimulation()
             time.sleep(CONTROL_DT)
                             
@@ -242,8 +301,13 @@ def plan_and_execute_motion(target_position, move_group):
 
 def simulate(num_sims, with_gui=False):
 
+    model = load_model()
+    segment_objects_in_environment(model)
+
+
     moveit_commander.roscpp_initialize(sys.argv)
     rospy.init_node('moveit_pybullet_integration', anonymous=True)
+
 
     moveit_logger = logging.getLogger('moveit_commander')
     moveit_logger.setLevel(logging.DEBUG)
@@ -259,6 +323,9 @@ def simulate(num_sims, with_gui=False):
     move_group = moveit_commander.MoveGroupCommander("arm")
     display_trajectory_publisher = rospy.Publisher('/move_group/display_planned_path', moveit_msgs.msg.DisplayTrajectory, queue_size=20)
 
+    move_group.set_planner_id("RRTConnectkConfigDefault")
+
+
     NUM_SIMS = num_sims
 
     initial_end_effector_position = move_group.get_current_joint_values()
@@ -272,7 +339,7 @@ def simulate(num_sims, with_gui=False):
         plank_pose.pose.position.y = 0.0
         plank_pose.pose.position.z = 0.05
         plank_pose.pose.orientation.w = 1.0
-        scene.add_box("plank", plank_pose, size=(1.2, 0.02, 0.2))
+        scene.add_box("plank", plank_pose, size=(0.6, 0.02, 0.6))
 
 
         initialize_robot_position(kinova_uid)
@@ -281,3 +348,6 @@ def simulate(num_sims, with_gui=False):
         reset_to_initial_state(move_group, initial_end_effector_position)
         p.disconnect()
 
+
+
+        
