@@ -37,11 +37,11 @@ The project is structured into several key concepts:
 * Python: Programming language for scripting and running simulations 
 * PyBullet: Physics simulation library for robotics
 * Additional Libraries: 
-- NumPy: For numerical computations
-- h5py: For handling HDF5 files 
-- geometry_msgs: For defining geometric messages in ROS
-- tf: For handling transformations in ROS 
-- time: For simulation time 
+    - NumPy: For numerical computations
+    - h5py: For handling HDF5 files 
+    - geometry_msgs: For defining geometric messages in ROS
+    - tf: For handling transformations in ROS 
+    - time: For simulation time 
 
 ## Future Work
 * **Object Detection and Segmentation**: Integrate TensorFlow for real-time object detection and segmentation to enhance task planning and execution.
