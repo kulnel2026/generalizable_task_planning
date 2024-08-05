@@ -19,6 +19,7 @@ from control_msgs.msg import FollowJointTrajectoryAction, FollowJointTrajectoryG
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 import tensorflow
 import cv2
+import os
 
 
 #Add object
@@ -38,15 +39,87 @@ MAX_FINGER_POS = 1.5
 
 COLOR = "green"
 
-STATE_DURATIONS = [3.0, 3.0, 1.0, 3.0, 3.0]#, 1.0]
-CONTROL_DT = 1. / 960.
+STATE_DURATIONS = [3.0, 3.0, 1.0, 3.0, 5.0, 3.0]
+CONTROL_DT = 1. / 30.
 
 initial_position = None
 target_position = None
 
 
 
-model_dir = 'Windows/media/neel/Windows/Users/kulka/generalizable_task_planning/src/simulation/mask_rcnn_inception_v2_coco.config'
+def get_camera_images():
+    width, height = 640, 480
+    fov = 60
+    aspect = width / height
+    near = 0.02
+    far = 3.5
+
+    view_matrix_1 = p.computeViewMatrix(
+        cameraEyePosition=[0.5, 0.3, 0.5],
+        cameraTargetPosition=[0.5, 0, 0],
+        cameraUpVector=[0, 0, 1]
+    )
+
+    view_matrix_2 = p.computeViewMatrix(
+        cameraEyePosition=[-0.5, -0.3, 0.5],
+        cameraTargetPosition=[0.5, 0, 0],
+        cameraUpVector=[0, 0, 1]
+    )
+
+    view_matrix_3 = p.computeViewMatrix(
+        cameraEyePosition=[0.5, 0.3, 0.8],
+        cameraTargetPosition=[0.5, 0, 0],
+        cameraUpVector=[0, 0, 1]
+    )
+
+    projection_matrix = p.computeProjectionMatrixFOV(
+        fov=fov,
+        aspect=aspect,
+        nearVal=near,
+        farVal=far
+    )
+
+    images_1 = p.getCameraImage(
+        width=width,
+        height=height,
+        viewMatrix=view_matrix_1,
+        projectionMatrix=projection_matrix,
+        renderer=p.ER_BULLET_HARDWARE_OPENGL
+    )
+
+    images_2 = p.getCameraImage(
+        width=width,
+        height=height,
+        viewMatrix=view_matrix_2,
+        projectionMatrix=projection_matrix,
+        renderer=p.ER_BULLET_HARDWARE_OPENGL
+    )
+
+    images_3 = p.getCameraImage(
+        width=width,
+        height=height,
+        viewMatrix=view_matrix_3,
+        projectionMatrix=projection_matrix,
+        renderer=p.ER_BULLET_HARDWARE_OPENGL
+    )
+
+    return images_1, images_2, images_3
+
+def process_images(images):
+    near = 0.02
+    far = 3.5
+    rgb_image = np.array(images[2]).reshape((images[1], images[0], 4))[:, :, :3]
+    depth_image = np.array(images[3]).reshape((images[1], images[0]))
+    seg_image = np.array(images[4]).reshape((images[1], images[0]))
+
+    depth_image = far * near / (far - (far - near) * depth_image)
+
+    return rgb_image, depth_image, seg_image
+
+
+'''
+
+model_dir = 'mask_rcnn_inception_v2_coco.config'
 
 def load_model():
     model = tensorflow.saved_model.load(model_dir)
@@ -97,7 +170,7 @@ def segment_objects_in_environment(model):
         
     cv2.imshow('Segmented Image', rgb_image)
     cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    cv2.destroyAllWindows()'''
 
 
 
@@ -125,6 +198,12 @@ def setup_environment(with_gui):
     plank_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.3, 0.01, 0.3])
     plank_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[0.3, 0.01, 0.3], rgbaColor=[0.5, 0.5, 0.5, 1])
     plank_uid = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=plank_shape, baseVisualShapeIndex=plank_visual_shape, basePosition=[0.5, 0, 0.05])
+
+    '''wall_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.01, 0.3, 0.3])
+    wall_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[0.01, 0.3, 0.3], rgbaColor=[0.7, 0.7, 0.7, 1])
+    wall_uid1 = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=wall_shape, baseVisualShapeIndex=wall_visual_shape, basePosition=[0.1, -0.1, 0.05])
+    wall_uid2 = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=wall_shape, baseVisualShapeIndex=wall_visual_shape, basePosition=[0.7, 0.1, 0.05])'''
+
 
 
     return kinova_uid, table_uid, plank_uid, client_id
@@ -167,7 +246,7 @@ def create_object():
         block_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.03, 0.03, 0.03])
         block_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[0.03, 0.03, 0.03], rgbaColor=color)
         block_body = p.createMultiBody(baseMass=1.0, baseCollisionShapeIndex=block_shape, baseVisualShapeIndex=block_visual_shape)
-        p.changeDynamics(block_body, -1, lateralFriction=4.5, spinningFriction=1.0, rollingFriction=1.0)
+        p.changeDynamics(block_body, -1, lateralFriction=14.5, spinningFriction=1.0, rollingFriction=1.0)
 
         initial_x = np.random.uniform(x_min, x_max)
         initial_y = np.random.uniform(y_min, y_max)
@@ -192,7 +271,7 @@ def run_simulation(kinova_uid, object_uid, client_id, move_group):
         joint_states_dataset = hdf_file.create_dataset('joint_states', shape=(0, len(ARM_JOINTS)), maxshape=(None, len(ARM_JOINTS)), dtype='f')
 
         for state in STATE_DURATIONS:
-            
+            img = p.getCameraImage(224, 224, renderer=p.ER_BULLET_HARDWARE_OPENGL)
             
                     
             joint_positions = current_joint_positions(kinova_uid, ARM_JOINTS)
@@ -213,19 +292,24 @@ def arm_control(object_uid, color, move_group, state):
     if (state == 0): 
         target_position[2] += 0.1
     elif (state == 1):
-        target_position[2] += 0.03
+        target_position[2] += 0.005
     elif (state == 3):
         target_position[2] += 0.2
     elif (state == 4):
+        time.sleep(1)
         stack_position = [0.5, 0.3, 0.2]
         target_position = stack_position
+    elif (state == 5):
+        stack_position = [0.5, 0.3, 0.0]
+        target_position = stack_position
+
 
     pose_target = geometry_msgs.msg.Pose()
     pose_target.position.x = target_position[0]
     pose_target.position.y = target_position[1]
     pose_target.position.z = target_position[2]
-    roll = 3.2
-    pitch = 0
+    roll = 0
+    pitch = 3.2
     yaw = 0
     quaternion = tf.transformations.quaternion_from_euler(roll, pitch, yaw)
     pose_target.orientation.x = quaternion[0]
@@ -253,7 +337,7 @@ def control_robot_state(kinova_uid, object_uid, state, move_group):
         if state == 1:
             for i, joint in enumerate(FINGER_JOINTS):
                 target_pos =  0
-                p.setJointMotorControl2(kinova_uid, joint, p.POSITION_CONTROL, target_pos, force=30)
+                p.setJointMotorControl2(kinova_uid, joint, p.POSITION_CONTROL, target_pos, force=100)
                 p.stepSimulation()
 
         for i in range(num_steps):
@@ -269,8 +353,8 @@ def control_robot_state(kinova_uid, object_uid, state, move_group):
     elif state == 2: #Close gripper
         for i in range(num_steps):
             for i, joint in enumerate(FINGER_JOINTS):
-                target_pos = 0.6 * MAX_FINGER_POS if i % 2 == 0 else 0.5 * MAX_FINGER_POS
-                p.setJointMotorControl2(kinova_uid, joint, p.POSITION_CONTROL, target_pos, force=60)
+                target_pos = 0.8 * MAX_FINGER_POS if i % 2 == 0 else 0.8 * MAX_FINGER_POS
+                p.setJointMotorControl2(kinova_uid, joint, p.POSITION_CONTROL, target_pos, force=30)
             p.stepSimulation()
             time.sleep(CONTROL_DT)
                             
@@ -301,9 +385,8 @@ def plan_and_execute_motion(target_position, move_group):
 
 def simulate(num_sims, with_gui=False):
 
-    model = load_model()
-    segment_objects_in_environment(model)
-
+    '''model = load_model()
+    segment_objects_in_environment(model)'''
 
     moveit_commander.roscpp_initialize(sys.argv)
     rospy.init_node('moveit_pybullet_integration', anonymous=True)
@@ -345,8 +428,24 @@ def simulate(num_sims, with_gui=False):
         initialize_robot_position(kinova_uid)
         object_uid = create_object()
         run_simulation(kinova_uid, object_uid, client_id, move_group)
+
+        # Capture images from the cameras
+        images_1, images_2, images_3 = get_camera_images()
+        rgb_1, depth_1, seg_1 = process_images(images_1)
+        rgb_2, depth_2, seg_2 = process_images(images_2)
+        rgb_3, depth_3, seg_3 = process_images(images_3)
+
+        seg_1_display = cv2.normalize(seg_1, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        seg_2_display = cv2.normalize(seg_2, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        seg_3_display = cv2.normalize(seg_3, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+
         reset_to_initial_state(move_group, initial_end_effector_position)
+
+
+
         p.disconnect()
+
+     
 
 
 
