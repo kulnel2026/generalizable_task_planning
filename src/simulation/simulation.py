@@ -39,8 +39,8 @@ MAX_FINGER_POS = 1.5
 
 COLOR = "green"
 
-STATE_DURATIONS = [3.0, 3.0, 1.0, 3.0, 5.0, 3.0]
-CONTROL_DT = 1. / 30.
+STATE_DURATIONS = [3.0, 3.0, 1.0, 3.0, 7.0]#, 3.0]
+CONTROL_DT = 1. / 240.
 
 initial_position = None
 target_position = None
@@ -195,14 +195,18 @@ def setup_environment(with_gui):
     for i in range(num_joints):
         p.changeDynamics(kinova_uid, i, mass=5.0)
 
-    plank_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.3, 0.01, 0.3])
-    plank_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[0.3, 0.01, 0.3], rgbaColor=[0.5, 0.5, 0.5, 1])
+    plank_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.1, 0.01, 0.3])
+    plank_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[0.1, 0.01, 0.3], rgbaColor=[0.5, 0.5, 0.5, 1])
     plank_uid = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=plank_shape, baseVisualShapeIndex=plank_visual_shape, basePosition=[0.5, 0, 0.05])
 
-    '''wall_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.01, 0.3, 0.3])
+    wall_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.01, 0.3, 0.3])
     wall_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[0.01, 0.3, 0.3], rgbaColor=[0.7, 0.7, 0.7, 1])
-    wall_uid1 = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=wall_shape, baseVisualShapeIndex=wall_visual_shape, basePosition=[0.1, -0.1, 0.05])
-    wall_uid2 = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=wall_shape, baseVisualShapeIndex=wall_visual_shape, basePosition=[0.7, 0.1, 0.05])'''
+    wall_uid1 = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=wall_shape, baseVisualShapeIndex=wall_visual_shape, basePosition=[0.15, 0.1, 0.05])
+    wall_uid2 = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=wall_shape, baseVisualShapeIndex=wall_visual_shape, basePosition=[0.85, -0.1, 0.05])
+
+    plank2_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.5, 0.5, 0.01])
+    plank2_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[0.5, 0.5, 0.01], rgbaColor=[0.5, 0.5, 0.5, 1])
+    plank2_uid = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=plank2_shape, baseVisualShapeIndex=plank2_visual_shape, basePosition=[0.75, 0, 0.75])
 
 
 
@@ -239,14 +243,14 @@ def create_object():
         [0, 1, 0, 1]   # Green
     ]
 
-    x_min, x_max = 0.0, 0.6
+    x_min, x_max = 0.2, 0.5
     y_min, y_max = -0.3, -0.05
 
     for color in colors:
         block_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.03, 0.03, 0.03])
         block_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[0.03, 0.03, 0.03], rgbaColor=color)
         block_body = p.createMultiBody(baseMass=1.0, baseCollisionShapeIndex=block_shape, baseVisualShapeIndex=block_visual_shape)
-        p.changeDynamics(block_body, -1, lateralFriction=14.5, spinningFriction=1.0, rollingFriction=1.0)
+        p.changeDynamics(block_body, -1, lateralFriction=24.5, spinningFriction=1.0, rollingFriction=1.0)
 
         initial_x = np.random.uniform(x_min, x_max)
         initial_y = np.random.uniform(y_min, y_max)
@@ -292,11 +296,10 @@ def arm_control(object_uid, color, move_group, state):
     if (state == 0): 
         target_position[2] += 0.1
     elif (state == 1):
-        target_position[2] += 0.005
+        target_position[2] += 0.003
     elif (state == 3):
         target_position[2] += 0.2
     elif (state == 4):
-        time.sleep(1)
         stack_position = [0.5, 0.3, 0.2]
         target_position = stack_position
     elif (state == 5):
@@ -331,24 +334,39 @@ def control_robot_state(kinova_uid, object_uid, state, move_group):
 
     print("state " + str(state))
 
-    if (state != 2):
+
+    if (state == 3):
+
+        target_position = list(p.getBasePositionAndOrientation(object_uid[color])[0])
+        target_position[2] += 0.2
+
+        joint_poses = p.calculateInverseKinematics(kinova_uid, 8, target_position)
+        for i in range(num_steps):
+            current_time = i * CONTROL_DT
+            
+            #for joint_index in range(p.getNumJoints(kinova_uid)):
+            for i, pos in enumerate(joint_poses):
+                if i < len(ARM_JOINTS):
+                    p.setJointMotorControl2(kinova_uid, ARM_JOINTS[i], p.POSITION_CONTROL, pos)
+            p.stepSimulation()
+            time.sleep(CONTROL_DT)
+    elif (state != 2):
         trajectory = arm_control(object_uid, color, move_group, state)
         
         if state == 1:
             for i, joint in enumerate(FINGER_JOINTS):
                 target_pos =  0
-                p.setJointMotorControl2(kinova_uid, joint, p.POSITION_CONTROL, target_pos, force=100)
+                p.setJointMotorControl2(kinova_uid, joint, p.POSITION_CONTROL, target_pos, force=150)
                 p.stepSimulation()
 
         for i in range(num_steps):
             current_time = i * CONTROL_DT
             index = int(current_time/(STATE_DURATIONS[state]/len(trajectory)))
             joint_positions = trajectory[index]
-            #for joint_index in range(p.getNumJoints(kinova_uid)):
             for joint_index in ARM_JOINTS:
                 p.setJointMotorControl2(bodyIndex=kinova_uid,jointIndex=joint_index,controlMode=p.POSITION_CONTROL,targetPosition=joint_positions[joint_index-2])
             p.stepSimulation()
-            time.sleep(CONTROL_DT)
+            time.sleep(CONTROL_DT) 
 
     elif state == 2: #Close gripper
         for i in range(num_steps):
@@ -366,7 +384,10 @@ def plan_and_execute_motion(target_position, move_group):
 
     move_group.set_pose_target(target_position)
     
+    start_time = time.time()
     plan = move_group.plan()
+    end_time = time.time()
+    print("time: " + str(end_time-start_time))
     move_group.go(wait=True)
 
     
@@ -422,7 +443,31 @@ def simulate(num_sims, with_gui=False):
         plank_pose.pose.position.y = 0.0
         plank_pose.pose.position.z = 0.05
         plank_pose.pose.orientation.w = 1.0
-        scene.add_box("plank", plank_pose, size=(0.6, 0.02, 0.6))
+        scene.add_box("plank", plank_pose, size=(0.2, 0.02, 0.6))
+
+        wall1_pose = geometry_msgs.msg.PoseStamped()
+        wall1_pose.header.frame_id = robot.get_planning_frame()
+        wall1_pose.pose.position.x = 0.15
+        wall1_pose.pose.position.y = 0.1
+        wall1_pose.pose.position.z = 0.05
+        wall1_pose.pose.orientation.w = 1.0
+        scene.add_box("wall1", wall1_pose, size=(0.02, 0.6, 0.6))
+
+        wall2_pose = geometry_msgs.msg.PoseStamped()
+        wall2_pose.header.frame_id = robot.get_planning_frame()
+        wall2_pose.pose.position.x = 0.85
+        wall2_pose.pose.position.y = -0.1
+        wall2_pose.pose.position.z = 0.05
+        wall2_pose.pose.orientation.w = 1.0
+        scene.add_box("wall2", wall2_pose, size=(0.02, 0.6, 0.6))
+
+        plank2_pose = geometry_msgs.msg.PoseStamped()
+        plank2_pose.header.frame_id = robot.get_planning_frame()
+        plank2_pose.pose.position.x = 0.75
+        plank2_pose.pose.position.y = 0.0
+        plank2_pose.pose.position.z = 0.75
+        plank2_pose.pose.orientation.w = 1.0
+        scene.add_box("plank2", plank2_pose, size=(1.0, 1.0, 0.02))
 
 
         initialize_robot_position(kinova_uid)
