@@ -46,6 +46,6 @@ The project is structured into several key concepts:
 ## Future Work
 * **Object Detection and Segmentation**: Integrate TensorFlow for real-time object detection and segmentation to enhance task planning and execution.
 * **Enhanced Obstacle Avoidance**: Implement more sophisticated algorithms for dynamic obstacle detection and avoidance.
-
+* **Path Biasing**: Implement a way to bias shorter or longer paths found by the motion planning algorithm
 
 # generalizing_task_planning
