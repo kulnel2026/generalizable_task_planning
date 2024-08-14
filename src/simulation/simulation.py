@@ -117,8 +117,8 @@ def process_images(images):
     return rgb_image, depth_image, seg_image
 
 
+#Work in progress code for object segmentation
 '''
-
 model_dir = 'mask_rcnn_inception_v2_coco.config'
 
 def load_model():
@@ -195,18 +195,20 @@ def setup_environment(with_gui):
     for i in range(num_joints):
         p.changeDynamics(kinova_uid, i, mass=5.0)
 
-    plank_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.1, 0.01, 0.3])
-    plank_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[0.1, 0.01, 0.3], rgbaColor=[0.5, 0.5, 0.5, 1])
+    #For multiple obstacles, change it to halfExtents=[0.1, 0.01, 0.3]
+    plank_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.3, 0.01, 0.3])
+    plank_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[0.3, 0.01, 0.3], rgbaColor=[0.5, 0.5, 0.5, 1])
     plank_uid = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=plank_shape, baseVisualShapeIndex=plank_visual_shape, basePosition=[0.5, 0, 0.05])
 
-    wall_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.01, 0.3, 0.3])
+    #Uncomment the below for multiple obstacles
+    '''wall_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.01, 0.3, 0.3])
     wall_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[0.01, 0.3, 0.3], rgbaColor=[0.7, 0.7, 0.7, 1])
     wall_uid1 = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=wall_shape, baseVisualShapeIndex=wall_visual_shape, basePosition=[0.15, 0.1, 0.05])
     wall_uid2 = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=wall_shape, baseVisualShapeIndex=wall_visual_shape, basePosition=[0.85, -0.1, 0.05])
 
     plank2_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.5, 0.5, 0.01])
     plank2_visual_shape = p.createVisualShape(p.GEOM_BOX, halfExtents=[0.5, 0.5, 0.01], rgbaColor=[0.5, 0.5, 0.5, 1])
-    plank2_uid = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=plank2_shape, baseVisualShapeIndex=plank2_visual_shape, basePosition=[0.75, 0, 0.75])
+    plank2_uid = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=plank2_shape, baseVisualShapeIndex=plank2_visual_shape, basePosition=[0.75, 0, 0.75])'''
 
 
 
@@ -243,8 +245,8 @@ def create_object():
         [0, 1, 0, 1]   # Green
     ]
 
-    x_min, x_max = 0.2, 0.5
-    y_min, y_max = -0.3, -0.05
+    x_min, x_max = 0.25, 0.475
+    y_min, y_max = -0.4, -0.05
 
     for color in colors:
         block_shape = p.createCollisionShape(p.GEOM_BOX, halfExtents=[0.03, 0.03, 0.03])
@@ -336,6 +338,7 @@ def control_robot_state(kinova_uid, object_uid, state, move_group):
 
 
     if (state == 3):
+        arm_control(object_uid, color, move_group, state) #Update the motion planner, but don't use the trajectory it gives as it's unnecessary 
 
         target_position = list(p.getBasePositionAndOrientation(object_uid[color])[0])
         target_position[2] += 0.2
@@ -386,9 +389,9 @@ def plan_and_execute_motion(target_position, move_group):
     
     start_time = time.time()
     plan = move_group.plan()
+    move_group.go(wait=True)
     end_time = time.time()
     print("time: " + str(end_time-start_time))
-    move_group.go(wait=True)
 
     
     trajectory_var = plan[1]
@@ -443,9 +446,11 @@ def simulate(num_sims, with_gui=False):
         plank_pose.pose.position.y = 0.0
         plank_pose.pose.position.z = 0.05
         plank_pose.pose.orientation.w = 1.0
-        scene.add_box("plank", plank_pose, size=(0.2, 0.02, 0.6))
+        #For multiple obstacles, change to size=(0.2, 0.02, 0.6)
+        scene.add_box("plank", plank_pose, size=(0.6, 0.02, 0.6))
 
-        wall1_pose = geometry_msgs.msg.PoseStamped()
+        #Uncomment the below for multiple obstacles
+        '''wall1_pose = geometry_msgs.msg.PoseStamped()
         wall1_pose.header.frame_id = robot.get_planning_frame()
         wall1_pose.pose.position.x = 0.15
         wall1_pose.pose.position.y = 0.1
@@ -467,7 +472,7 @@ def simulate(num_sims, with_gui=False):
         plank2_pose.pose.position.y = 0.0
         plank2_pose.pose.position.z = 0.75
         plank2_pose.pose.orientation.w = 1.0
-        scene.add_box("plank2", plank2_pose, size=(1.0, 1.0, 0.02))
+        scene.add_box("plank2", plank2_pose, size=(1.0, 1.0, 0.02))'''
 
 
         initialize_robot_position(kinova_uid)
