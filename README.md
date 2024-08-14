@@ -47,25 +47,5 @@ The project is structured into several key concepts:
 * **Object Detection and Segmentation**: Integrate TensorFlow for real-time object detection and segmentation to enhance task planning and execution.
 * **Enhanced Obstacle Avoidance**: Implement more sophisticated algorithms for dynamic obstacle detection and avoidance.
 
-## Citation
-```
-@misc{wang2022generalizable,
-      title={Generalizable Task Planning through Representation Pretraining}, 
-      author={Chen Wang and Danfei Xu and Li Fei-Fei},
-      year={2022},
-      eprint={2205.07993},
-      archivePrefix={arXiv},
-      primaryClass={cs.RO}
-}
-```
-```
-@misc{mukherjee2021reactive,
-      title={Reactive Long Horizon Task Execution via Visual Skill and Precondition Models}, 
-      author={Shohin Mukherjee and Chris Paxton and Arsalan Mousavian and Adam Fishman and Maxim Likhachev and Dieter Fox},
-      year={2021},
-      eprint={2011.08694},
-      archivePrefix={arXiv},
-      primaryClass={cs.RO}
-}
-```
+
 # generalizing_task_planning
